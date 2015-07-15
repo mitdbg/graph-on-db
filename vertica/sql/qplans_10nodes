@@ -1,0 +1,73 @@
+Triangle Counting on 10 nodes, > 1billion edges
+
+------------------------------ 
+ QUERY PLAN DESCRIPTION: 
+ ------------------------------
+ 
+ explain SELECT count(*)
+         FROM friendster_edge e1
+         JOIN friendster_edge e2 ON e1.to_node=e2.from_node AND e1.from_node < e1.to_node
+         JOIN friendster_edge e3 ON e2.to_node=e3.from_node AND e3.to_node=e1.from_node 
+           AND e2.from_node < e2.to_node AND e3.from_node < e3.to_node;
+ 
+ Access Path:
+ +-GROUPBY NOTHING [Cost: 24M, Rows: 1] (PATH ID: 1)
+ |  Aggregates: count(*)
+ |  Execute on: All Nodes
+ | +---> JOIN HASH [Cost: 24M, Rows: 123K] (PATH ID: 2) Outer (RESEGMENT)(LOCAL ROUND ROBIN)
+ | |      Join Cond: (e2.to_node = e3.from_node) AND (e3.to_node = e1.from_node)
+ | |      Join Filter: (e2.from_node < e2.to_node) AND (e3.from_node < e3.to_node)
+ | |      Materialize at Input: e2.from_node, e2.to_node
+ | |      Execute on: All Nodes
+ | | +-- Outer -> JOIN MERGEJOIN(inputs presorted) [Cost: 2M, Rows: 4B (2B RLE)] (PATH ID: 3)
+ | | |      Join Cond: (e1.to_node = e2.from_node)
+ | | |      Execute on: All Nodes
+ | | | +-- Outer -> STORAGE ACCESS for e2 [Cost: 26K, Rows: 4B (11M RLE)] (PATH ID: 4)
+ | | | |      Projection: public.friendster_edge_segFrom
+ | | | |      Materialize: e2.from_node
+ | | | |      Execute on: All Nodes
+ | | | |      Runtime Filter: (SIP1(MergeJoin): e2.from_node)
+ | | | +-- Inner -> STORAGE ACCESS for e1 [Cost: 1M, Rows: 2B] (PATH ID: 5)
+ | | | |      Projection: public.friendster_edge_segTo_b0
+ | | | |      Materialize: e1.from_node, e1.to_node
+ | | | |      Filter: (e1.from_node < e1.to_node)
+ | | | |      Execute on: All Nodes
+ | | +-- Inner -> STORAGE ACCESS for e3 [Cost: 873K, Rows: 4B] (PATH ID: 6)
+ | | |      Projection: public.friendster_edge_segFrom
+ | | |      Materialize: e3.from_node, e3.to_node
+ | | |      Execute on: All Nodes
+ 
+
+
+Strong Overlap, > 1 billion edges
+
+ ------------------------------ 
+ QUERY PLAN DESCRIPTION: 
+ ------------------------------
+ 
+ explain SELECT e1.from_node as n1,e2.from_node as n2, count(*)
+           FROM friendster_edge e1
+           JOIN friendster_edge e2 ON e1.to_node=e2.to_node AND e1.from_node<e2.from_node
+           GROUP BY e1.from_node,e2.from_node
+           HAVING count(*) > 100;
+ 
+ Access Path:
+ +-GROUPBY HASH (GLOBAL RESEGMENT GROUPS) (LOCAL RESEGMENT GROUPS) [Cost: 19M, Rows: 4B] (PATH ID: 1)
+ |  Aggregates: count(*)
+ |  Group By: e1.from_node, e2.from_node
+ |  Filter: (<SVAR> > 100)
+ |  Execute on: All Nodes
+ | +---> JOIN MERGEJOIN(inputs presorted) [Cost: 3M, Rows: 4B] (PATH ID: 2)
+ | |      Join Cond: (e1.to_node = e2.to_node)
+ | |      Join Filter: (e1.from_node < e2.from_node)
+ | |      Execute on: All Nodes
+ | | +-- Outer -> STORAGE ACCESS for e1 [Cost: 873K, Rows: 4B] (PATH ID: 3)
+ | | |      Projection: public.friendster_edge_segTo_b0
+ | | |      Materialize: e1.to_node, e1.from_node
+ | | |      Execute on: All Nodes
+ | | |      Runtime Filter: (SIP1(MergeJoin): e1.to_node)
+ | | +-- Inner -> STORAGE ACCESS for e2 [Cost: 873K, Rows: 4B] (PUSHED GROUPING) (PATH ID: 4)
+ | | |      Projection: public.friendster_edge_segTo_b0
+ | | |      Materialize: e2.to_node, e2.from_node
+ | | |      Execute on: All Nodes
+

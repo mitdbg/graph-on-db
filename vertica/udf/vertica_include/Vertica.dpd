@@ -1,0 +1,39 @@
+$(SOURCE)/VerticaSDK/include/Vertica.o:  \
+ $(SOURCE)/VerticaSDK/include/Vertica.cpp \
+  $(SOURCE)/VerticaSDK/include/Vertica.h \
+  $(SOURCE)/VerticaSDK/include/VerticaSymbols.h \
+  $(SOURCE)/VerticaSDK/include/VerticaUDx.h \
+  $(SOURCE)/VerticaSDK/include/PGUDxShared.h \
+  $(SOURCE)/VerticaSDK/include/BasicsUDxShared.h \
+  $(SOURCE)/VerticaSDK/include/Oids.h \
+  $(SOURCE)/VerticaSDK/include/EEUDxShared.h \
+  $(SOURCE)/VerticaSDK/include/TimestampUDxShared.h \
+  $(SOURCE)/VerticaSDK/include/IntervalUDx.h \
+  $(SOURCE)/VerticaSDK/include/VerticaUDl.h \
+  $(SOURCE)/VerticaSDK/include/ServerFunctions.h \
+  $(SOURCE)/VerticaSDK/include/Logging.h \
+  $(SOURCE)/VerticaSDK/include/DateTimeParsing.h \
+  $(SOURCE)/VerticaSDK/include/BuildInfo.h \
+  $(SOURCE)/VerticaSDK/include/NumericTables.h \
+  $(SOURCE)/VerticaSDK/include/NumericSupport.cpp \
+  $(SOURCE)/VerticaSDK/include/BasicsSupport.h
+ \
+ $(SOURCE)/VerticaSDK/include/Vertica.cpp \
+  $(SOURCE)/VerticaSDK/include/Vertica.h \
+  $(SOURCE)/VerticaSDK/include/VerticaSymbols.h \
+  $(SOURCE)/VerticaSDK/include/VerticaUDx.h \
+  $(SOURCE)/VerticaSDK/include/PGUDxShared.h \
+  $(SOURCE)/VerticaSDK/include/BasicsUDxShared.h \
+  $(SOURCE)/VerticaSDK/include/Oids.h \
+  $(SOURCE)/VerticaSDK/include/EEUDxShared.h \
+  $(SOURCE)/VerticaSDK/include/TimestampUDxShared.h \
+  $(SOURCE)/VerticaSDK/include/IntervalUDx.h \
+  $(SOURCE)/VerticaSDK/include/VerticaUDl.h \
+  $(SOURCE)/VerticaSDK/include/ServerFunctions.h \
+  $(SOURCE)/VerticaSDK/include/Logging.h \
+  $(SOURCE)/VerticaSDK/include/DateTimeParsing.h \
+  $(SOURCE)/VerticaSDK/include/BuildInfo.h \
+  $(SOURCE)/VerticaSDK/include/NumericTables.h \
+  $(SOURCE)/VerticaSDK/include/NumericSupport.cpp \
+  $(SOURCE)/VerticaSDK/include/BasicsSupport.h:
+

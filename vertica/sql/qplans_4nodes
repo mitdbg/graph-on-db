@@ -1,0 +1,239 @@
+Shortest Path
+-------------
+
+ explain SELECT e.to_node AS id, min(n1.value+1) AS value
+         FROM twitter_node AS n1, twitter_edge_segTo_b0 AS e, twitter_node AS n2
+         WHERE n1.id=e.from_node AND n2.id=e.to_node
+         GROUP BY e.to_node
+ HAVING min(n1.value+1) < min(n2.value);
+ 
+ Access Path:
+ +-GROUPBY PIPELINED [Cost: 3M, Rows: 3M] (PATH ID: 1)
+ |  Aggregates: min((n1.value + 1)), min(n2.value)
+ |  Group By: e.to_node
+ |  Filter: (<SVAR> < <SVAR>)
+ |  Execute on: All Nodes
+ | +---> JOIN MERGEJOIN(inputs presorted) [Cost: 2M, Rows: 1B] (PATH ID: 2)
+ | |      Join Cond: (n2.id = e.to_node)
+ | |      Materialize at Input: e.to_node
+ | |      Execute on: All Nodes
+ | | +-- Outer -> JOIN HASH [Cost: 2M, Rows: 1B] (PATH ID: 3) Inner (BROADCAST)
+ | | |      Join Cond: (n1.id = e.from_node)
+ | | |      Execute on: All Nodes
+ | | | +-- Outer -> STORAGE ACCESS for e [Cost: 861K, Rows: 1B] (PATH ID: 4)
+ | | | |      Projection: public.twitter_edge_segTo_b0
+ | | | |      Materialize: e.from_node
+ | | | |      Execute on: All Nodes
+ | | | |      Runtime Filters: (SIP2(HashJoin): e.from_node), (SIP1(MergeJoin): e.to_node)
+ | | | +-- Inner -> STORAGE ACCESS for n1 [Cost: 48K, Rows: 42M] (PATH ID: 5)
+ | | | |      Projection: public.twitter_node_b0
+ | | | |      Materialize: n1.id, n1.value
+ | | | |      Execute on: All Nodes
+ | | +-- Inner -> STORAGE ACCESS for n2 [Cost: 48K, Rows: 42M] (PATH ID: 6)
+ | | |      Projection: public.twitter_node_b0
+ | | |      Materialize: n2.id, n2.value
+ | | |      Execute on: All Nodes
+ 
+
+
+PageRank
+--------
+
+ explain SELECT  id, value/Count(to_node) AS new_value 
+ FROM twitter_edge AS edge,twitter_node as node 
+ WHERE edge.from_node=node.id 
+ GROUP BY id,value;
+ 
+ Access Path:
+ +-GROUPBY HASH (LOCAL RESEGMENT GROUPS) [Cost: 2M, Rows: 42M] (PATH ID: 1)
+ |  Aggregates: count(edge.to_node)
+ |  Group By: node.id, node.value
+ |  Execute on: All Nodes
+ | +---> JOIN MERGEJOIN(inputs presorted) [Cost: 2M, Rows: 1B] (PATH ID: 2)
+ | |      Join Cond: (edge.from_node = node.id)
+ | |      Materialize at Output: edge.to_node
+ | |      Execute on: All Nodes
+ | | +-- Outer -> STORAGE ACCESS for edge [Cost: 861K, Rows: 1B] (PATH ID: 3)
+ | | |      Projection: public.twitter_edge_b1
+ | | |      Materialize: edge.from_node
+ | | |      Execute on: All Nodes
+ | | |      Runtime Filter: (SIP1(MergeJoin): edge.from_node)
+ | | +-- Inner -> STORAGE ACCESS for node [Cost: 48K, Rows: 42M] (PATH ID: 4)
+ | | |      Projection: public.twitter_node_b1
+ | | |      Materialize: node.id, node.value
+ | | |      Execute on: All Nodes
+
+
+ explain SELECT to_node AS id, 0.15/1000000 + 0.85*SUM(new_value) AS value 
+ FROM twitter_edge AS edge,node_outbound 
+ WHERE edge.from_node=node_outbound.id 
+ GROUP BY to_node;
+ 
+ Access Path:
+ +-GROUPBY HASH (GLOBAL RESEGMENT GROUPS) (LOCAL RESEGMENT GROUPS) [Cost: 6M, Rows: 3M (NO STATISTICS)] (PATH ID: 1)
+ |  Aggregates: sum(<SVAR>)
+ |  Group By: edge.to_node
+ |  Execute on: All Nodes
+ | +---> JOIN MERGEJOIN(inputs presorted) [Cost: 2M, Rows: 1B (NO STATISTICS)] (PATH ID: 2)
+ | |      Join Cond: (edge.from_node = node_outbound.id)
+ | |      Materialize at Output: edge.to_node
+ | |      Execute on: All Nodes
+ | | +-- Outer -> STORAGE ACCESS for edge [Cost: 861K, Rows: 1B] (PATH ID: 3)
+ | | |      Projection: public.twitter_edge_b1
+ | | |      Materialize: edge.from_node
+ | | |      Execute on: All Nodes
+ | | |      Runtime Filter: (SIP1(MergeJoin): edge.from_node)
+ | | +-- Inner -> STORAGE ACCESS for node_outbound [Cost: 126K, Rows: 40M (NO STATISTICS)] (PUSHED GROUPING) (PATH ID: 4)
+ | | |      Projection: public.node_outbound_b1
+ | | |      Materialize: node_outbound.id, node_outbound.new_value
+ | | |      Execute on: All Nodes
+
+
+
+Triangle Counting (global)
+--------------------------
+
+ explain SELECT count(*)
+         FROM ulivejournal_edge e1
+         JOIN ulivejournal_edge e2 ON e1.to_node=e2.from_node AND e1.from_node < e1.to_node AND e2.from_node < e2.to_node
+         JOIN ulivejournal_edge e3 ON e2.to_node=e3.from_node AND e3.to_node=e1.from_node 
+         WHERE e3.to_node < e3.from_node;
+ 
+ Access Path:
+ +-GROUPBY NOTHING [Cost: 535K, Rows: 1] (PATH ID: 1)
+ |  Aggregates: count(*)
+ |  Execute on: All Nodes
+ | +---> JOIN HASH [Cost: 535K, Rows: 1K] (PATH ID: 2) Outer (RESEGMENT)
+ | |      Join Cond: (e2.to_node = e3.from_node) AND (e3.to_node = e1.from_node)
+ | |      Materialize at Input: e1.to_node, e1.from_node
+ | |      Execute on: All Nodes
+ | | +-- Outer -> JOIN MERGEJOIN(inputs presorted) [Cost: 205K, Rows: 33M] (PATH ID: 3)
+ | | |      Join Cond: (e1.to_node = e2.from_node)
+ | | |      Execute on: All Nodes
+ | | | +-- Outer -> STORAGE ACCESS for e1 [Cost: 95K, Rows: 33M] (PATH ID: 4)
+ | | | |      Projection: public.ulivejournal_edge_segTo_b0
+ | | | |      Materialize: e1.from_node, e1.to_node
+ | | | |      Filter: (e1.from_node < e1.to_node)
+ | | | |      Execute on: All Nodes
+ | | | |      Runtime Filter: (SIP1(MergeJoin): e1.to_node)
+ | | | +-- Inner -> STORAGE ACCESS for e2 [Cost: 95K, Rows: 33M] (PATH ID: 5)
+ | | | |      Projection: public.ulivejournal_edge_b0
+ | | | |      Materialize: e2.from_node, e2.to_node
+ | | | |      Filter: (e2.from_node < e2.to_node)
+ | | | |      Execute on: All Nodes
+ | | +-- Inner -> STORAGE ACCESS for e3 [Cost: 96K, Rows: 40M] (PATH ID: 6)
+ | | |      Projection: public.ulivejournal_edge_b0
+ | | |      Materialize: e3.to_node, e3.from_node
+ | | |      Filter: (e3.to_node < e3.from_node)
+ | | |      Execute on: All Nodes
+
+
+
+Triangle Counting (local)
+-------------------------
+
+ explain SELECT e1.from_node,count(*)/2 AS triangles
+           FROM ulivejournal_edge e3 
+           JOIN ulivejournal_edge e1 ON e3.to_node=e1.from_node
+   JOIN ulivejournal_edge e2 ON e2.to_node=e3.from_node 
+           WHERE e1.to_node=e2.from_node 
+           GROUP BY e1.from_node;
+ 
+ Access Path:
+ +-GROUPBY HASH (LOCAL RESEGMENT GROUPS) [Cost: 979K, Rows: 4K] (PATH ID: 1)
+ |  Aggregates: count(*)
+ |  Group By: e1.from_node
+ |  Execute on: All Nodes
+ | +---> JOIN HASH [Cost: 979K, Rows: 4K] (PATH ID: 2) Outer (RESEGMENT)
+ | |      Join Cond: (e3.to_node = e1.from_node) AND (e1.to_node = e2.from_node)
+ | |      Materialize at Input: e3.from_node, e3.to_node
+ | |      Execute on: All Nodes
+ | | +-- Outer -> JOIN MERGEJOIN(inputs presorted) [Cost: 152K, Rows: 69M] (PATH ID: 3)
+ | | |      Join Cond: (e2.to_node = e3.from_node)
+ | | |      Execute on: All Nodes
+ | | | +-- Outer -> STORAGE ACCESS for e3 [Cost: 41K, Rows: 69M] (PATH ID: 4)
+ | | | |      Projection: public.ulivejournal_edge_b0
+ | | | |      Materialize: e3.from_node
+ | | | |      Execute on: All Nodes
+ | | | |      Runtime Filter: (SIP1(MergeJoin): e3.from_node)
+ | | | +-- Inner -> STORAGE ACCESS for e2 [Cost: 81K, Rows: 69M] (PATH ID: 5)
+ | | | |      Projection: public.ulivejournal_edge_segTo_b0
+ | | | |      Materialize: e2.to_node, e2.from_node
+ | | | |      Execute on: All Nodes
+ | | +-- Inner -> STORAGE ACCESS for e1 [Cost: 81K, Rows: 69M] (PATH ID: 6)
+ | | |      Projection: public.ulivejournal_edge_b0
+ | | |      Materialize: e1.from_node, e1.to_node
+ | | |      Execute on: All Nodes
+
+
+
+Strong Overlap
+--------------
+
+ explain SELECT e1.from_node as n1,e2.from_node as n2, count(*)
+           FROM youtube_edge e1
+           JOIN youtube_edge e2 ON e1.to_node=e2.to_node AND e1.from_node<e2.from_node
+           GROUP BY e1.from_node,e2.from_node
+           HAVING count(*) > 100;
+ 
+ Access Path:
+ +-GROUPBY HASH (GLOBAL RESEGMENT GROUPS) (LOCAL RESEGMENT GROUPS) [Cost: 71K, Rows: 6M] (PATH ID: 1)
+ |  Aggregates: count(*)
+ |  Group By: e1.from_node, e2.from_node
+ |  Filter: (<SVAR> > 100)
+ |  Execute on: All Nodes
+ | +---> JOIN MERGEJOIN(inputs presorted) [Cost: 18K, Rows: 6M] (PATH ID: 2)
+ | |      Join Cond: (e1.to_node = e2.to_node)
+ | |      Join Filter: (e1.from_node < e2.from_node)
+ | |      Execute on: All Nodes
+ | | +-- Outer -> STORAGE ACCESS for e1 [Cost: 7K, Rows: 6M] (PATH ID: 3)
+ | | |      Projection: public.youtube_edge_segTo_b0
+ | | |      Materialize: e1.to_node, e1.from_node
+ | | |      Execute on: All Nodes
+ | | |      Runtime Filter: (SIP1(MergeJoin): e1.to_node)
+ | | +-- Inner -> STORAGE ACCESS for e2 [Cost: 7K, Rows: 6M] (PUSHED GROUPING) (PATH ID: 4)
+ | | |      Projection: public.youtube_edge_segTo_b0
+ | | |      Materialize: e2.to_node, e2.from_node
+ | | |      Execute on: All Nodes
+
+
+
+Weak Ties
+---------
+
+ explain SELECT e1.to_node AS Id, sum(case when e3.to_node is null then 1 else 0 end)/2 AS Count
+           FROM youtube_edge e1
+           JOIN youtube_edge e2 ON e1.to_node=e2.from_node AND e1.from_node<>e2.to_node
+           LEFT JOIN youtube_edge e3 ON e2.to_node=e3.from_node AND e1.from_node=e3.to_node
+           GROUP BY e1.to_node
+           HAVING sum(case when e3.to_node is null then 1 else 0 end)/2 > 1000;
+ 
+ Access Path:
+ +-GROUPBY HASH (LOCAL RESEGMENT GROUPS) [Cost: 61K, Rows: 2M] (PATH ID: 1)
+ |  Aggregates: sum(CASE WHEN (e3.to_node IS NULL) THEN 1 ELSE 0 END)
+ |  Group By: e1.to_node
+ |  Filter: ((<SVAR> / 2) > 1000)
+ |  Execute on: All Nodes
+ | +---> JOIN HASH [RightOuter] [Cost: 59K, Rows: 6M] (PATH ID: 2)
+ | |      Join Cond: (e2.to_node = e3.from_node) AND (e1.from_node = e3.to_node)
+ | |      Materialize at Input: e1.to_node, e1.from_node
+ | |      Execute on: All Nodes
+ | | +-- Outer -> STORAGE ACCESS for e3 [Cost: 28K, Rows: 6M] (PATH ID: 3)
+ | | |      Projection: public.youtube_edge_orderFrom_node0001
+ | | |      Materialize: e3.from_node, e3.to_node
+ | | |      Execute on: All Nodes
+ | | |      Runtime Filters: (SIP1(HashJoin): e3.from_node), (SIP2(HashJoin): e3.to_node), (SIP3(HashJoin): e3.from_node, e3.to_node)
+ | | +-- Inner -> JOIN MERGEJOIN(inputs presorted) [Cost: 18K, Rows: 6M] (PATH ID: 4)
+ | | |      Join Cond: (e1.to_node = e2.from_node)
+ | | |      Join Filter: (e1.from_node <> e2.to_node)
+ | | |      Execute on: All Nodes
+ | | | +-- Outer -> STORAGE ACCESS for e1 [Cost: 7K, Rows: 6M] (PATH ID: 5)
+ | | | |      Projection: public.youtube_edge_segTo_b0
+ | | | |      Materialize: e1.to_node, e1.from_node
+ | | | |      Execute on: All Nodes
+ | | | |      Runtime Filter: (SIP4(MergeJoin): e1.to_node)
+ | | | +-- Inner -> STORAGE ACCESS for e2 [Cost: 7K, Rows: 6M] (PATH ID: 6)
+ | | | |      Projection: public.youtube_edge_b0
+ | | | |      Materialize: e2.from_node, e2.to_node
+ | | | |      Execute on: All Nodes
+
